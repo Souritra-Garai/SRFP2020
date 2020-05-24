@@ -1,4 +1,5 @@
 import numpy as np
+from ai.cs import sp2cart
 from itertools import combinations
 
 e   =   1.602176487e-19    # C
@@ -37,9 +38,9 @@ def partial_derivative(f, x_vector, j) :
 
     x_j = x_vector[j]
 
-    epsilon = 1e-10
+    epsilon = 1e-20
     
-    if x_j > 1e-5 :
+    if x_j > 1e-10 :
         
         epsilon *= x_j
 
@@ -92,7 +93,7 @@ class Charge() :
     # due to C
     def q_e(self, origin=np.zeros(3)) :
 
-        return ( self.r - origin ).reshape((-1, 1)) * self.P_e(origin) 
+        return np.outer(self.P_e(origin) , (self.r - origin) )
 
     # Quadrupole moment Q_e about origin
     # due to C
@@ -157,18 +158,27 @@ class ChargeDistribution() :
 
         return np.sum( [C.PE(V) for C in self.Charges] , axis=0 )
 
+    # Dipole moment of the chargeDistro
+    # about the point origin
     def P_e(self, origin=np.zeros(3)) :
 
         return np.sum( [ C.P_e(origin) for C in self.Charges ], axis=0 )
 
+    # Second moment of the chargeDistro
+    # about the point origin
     def q_e(self, origin=np.zeros(3)) :
 
         return np.sum( [ C.q_e(origin) for C in self.Charges ], axis=0 )
 
+    # Quadrupole moment of the chargeDistro
+    # about the point origin
     def Q_e(self, origin=np.zeros(3)) :
 
         return np.sum( [ C.Q_e(origin) for C in self.Charges ], axis=0 )
 
+# Dipole DP
+# has a dipole moment vector p
+# and a position vector r
 class Dipole() :
 
     # Constructor
@@ -177,6 +187,11 @@ class Dipole() :
         self.p = np.array(p)
         self.r = np.array([x,y,z])
 
+    # Constructor to create a dipole
+    # from a ChargeDistribution object
+    # The object will be treated as a pure dipole
+    # with r equal to the mean position
+    # of the charge distribution
     @classmethod
     def fromChargeDistro(cls, chargeDistro) :
 
@@ -184,23 +199,42 @@ class Dipole() :
 
         return cls(chargeDistro.P_e(), r[0], r[1], r[2])  
 
+    # Electric field E due to DP
+    # at a point with position vector r
     def E(self, r) :
 
-        return - grad(self.V, r)
+        mod_r = np.linalg.norm(r)
 
+        J_r_r3 = np.identity(3) * ( 1 / mod_r**3) - 3 * np.outer(r,r) * (1 / mod_r**5) 
+
+        return - one_over_4_pi_e0 * np.dot(self.P_e, J_r_r3)
+
+    # Potential V due to DP
+    # at a position whose position vector is r
     def V(self, r) :
 
         delta_r = r - self.r
 
         return one_over_4_pi_e0 * np.inner(self.p, delta_r) / ( np.linalg.norm(delta_r) ** 3 )
 
+    # Dipole moment P_e
     def P_e(self) :
 
         return self.p
 
+    # Potential energy PE due to 
+    # potential V at the position of DP
     def PE(self, V) :
 
         return np.inner( self.P_e(), grad(V, self.r) )
+
+    # Rotate and set the direction of p
+    # according to physics spherical coordinates notation
+    # https://en.wikipedia.org/wiki/Spherical_coordinate_system#/media/File:3D_Spherical.svg
+    def set_theta_phi(self, theta, phi) :
+
+        self.p = sp2cart(np.linalg.norm(self.p), theta, phi)
+        pass
 
     
 
